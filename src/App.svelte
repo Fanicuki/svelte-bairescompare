@@ -34,9 +34,7 @@
   }
 
   async function searchProduct(): Promise<void> {
-    const queryInput = document.getElementById(
-      "search-input"
-    ) as HTMLInputElement;
+    const queryInput = document.getElementById("search-input") as HTMLInputElement;
     const query = queryInput.value.toLowerCase().trim();
     const productList = document.getElementById("product-list") as HTMLElement;
     const spinner = document.getElementById("loading-spinner") as HTMLElement;
@@ -54,70 +52,59 @@
     try {
       const diaBaseUrl = "https://diaonline.supermercadosdia.com.ar/almacen";
       const jumboBaseUrl = "https://www.jumbo.com.ar/almacen";
-      const products: Array<{
-        image: string;
+
+      const diaProducts: Array<{
+        image: string | null;
         name: string;
         price: number;
         store: string;
         url: string;
       }> = [];
 
+      const jumboProducts: Array<{
+        image: string | null;
+        name: string;
+        price: number;
+        store: string;
+        url: string;
+      }> = [];
+
+      // Función para extraer productos de Día
       const extractDiaData = async () => {
         let currentPage = 1;
         let hasMorePages = true;
 
         while (hasMorePages) {
-          console.log(
-            `Cargando productos de Día desde: ${diaBaseUrl}?page=${currentPage}`
-          );
-
           const html = await fetchWithRetry(`${diaBaseUrl}?page=${currentPage}`);
-          if (!html) {
-            console.error(
-              `No se pudo cargar la página: ${diaBaseUrl}?page=${currentPage}`
-            );
-            break;
-          }
+          if (!html) break;
 
           const root = parse(html);
-          const productContainers = root.querySelectorAll(
-            ".vtex-product-summary-2-x-container"
-          );
+          const productContainers = root.querySelectorAll(".vtex-product-summary-2-x-container");
 
           if (productContainers.length === 0) {
             hasMorePages = false;
             break;
           }
 
-          productContainers.slice(0, 16).forEach((product) => {
-            const imageTag = product.querySelector(
-              ".vtex-product-summary-2-x-imageNormal"
-            );
-            const nameTag = product.querySelector(
-              ".vtex-product-summary-2-x-productBrand"
-            );
-            const priceTag = product.querySelector(
-              ".vtex-product-price-1-x-currencyContainer"
-            );
+          productContainers.forEach((product) => {
+            const imageTag = product.querySelector(".vtex-product-summary-2-x-imageNormal");
+            const nameTag = product.querySelector(".vtex-product-summary-2-x-productBrand");
+            const priceTag = product.querySelector(".vtex-product-price-1-x-currencyContainer");
 
-            if (imageTag && nameTag && priceTag) {
-              const imageUrl = imageTag.getAttribute("src");
+            if (nameTag && priceTag) {
               const name = nameTag.textContent.toLowerCase();
               const price = parseFloat(
-                priceTag.textContent
-                  .replace("$", "")
-                  .replace(".", "")
-                  .replace(",", ".")
+                priceTag.textContent.replace("$", "").replace(".", "").replace(",", ".")
               );
 
               const regex = new RegExp(query, "i");
               if (regex.test(name)) {
-                products.push({
+                diaProducts.push({
+                  image: imageTag ? imageTag.getAttribute("src") : null,
                   name,
                   price,
                   store: "Día",
                   url: diaBaseUrl,
-                  image: imageUrl,
                 });
               }
             }
@@ -127,62 +114,41 @@
         }
       };
 
+      // Función para extraer productos de Jumbo
       const extractJumboData = async () => {
         let currentPage = 1;
         let hasMorePages = true;
 
         while (hasMorePages) {
-          console.log(
-            `Cargando productos de Jumbo desde: ${jumboBaseUrl}?page=${currentPage}`
-          );
-
           const html = await fetchWithRetry(`${jumboBaseUrl}?page=${currentPage}`);
-          if (!html) {
-            console.error(
-              `No se pudo cargar la página: ${jumboBaseUrl}?page=${currentPage}`
-            );
-            break;
-          }
+          if (!html) break;
 
           const root = parse(html);
-          const productContainers = root.querySelectorAll(
-            ".vtex-flex-layout-0-x-flexRow"
-          );
+          const productContainers = root.querySelectorAll(".vtex-search-result-3-x-galleryItem");
 
           if (productContainers.length === 0) {
             hasMorePages = false;
             break;
           }
 
-          productContainers.slice(0, 16).forEach((product) => {
-            const imageTag = product.querySelector(
-              ".vtex-product-summary-2-x-imageNormal"
-            );
-            const nameTag = product.querySelector(
-              ".vtex-product-summary-2-x-productBrand"
-            );
-            const priceTag = product.querySelector(
-              ".jumboargentinaio-store-theme-1dCOMij_MzTzZOCohX1K7w"
-            );
+          productContainers.forEach((product) => {
+            const nameTag = product.querySelector(".vtex-product-summary-2-x-productBrand");
+            const priceTag = product.querySelector(".jumboargentinaio-store-theme-1dCOMij_MzTzZOCohX1K7w");
 
-            if (imageTag && nameTag && priceTag) {
-              const imageUrl = imageTag.getAttribute("src");
+            if (nameTag && priceTag) {
               const name = nameTag.textContent.toLowerCase();
               const price = parseFloat(
-                priceTag.textContent
-                  .replace("$", "")
-                  .replace(".", "")
-                  .replace(",", ".")
+                priceTag.textContent.replace("$", "").replace(".", "").replace(",", ".")
               );
 
               const regex = new RegExp(query, "i");
               if (regex.test(name)) {
-                products.push({
+                jumboProducts.push({
+                  image: null, // Ignorar imágenes para Jumbo
                   name,
                   price,
                   store: "Jumbo",
                   url: jumboBaseUrl,
-                  image: imageUrl,
                 });
               }
             }
@@ -192,30 +158,24 @@
         }
       };
 
+      // Ejecutar ambas extracciones
       await Promise.all([extractDiaData(), extractJumboData()]);
 
-      products.sort((a, b) => a.price - b.price);
+      // Fusionar y ordenar productos
+      const products = [...diaProducts, ...jumboProducts].sort((a, b) => a.price - b.price);
+
+      // Renderizar los productos
       products.forEach((product) => {
         const li = document.createElement("li");
 
-        const img = document.createElement("img");
-        img.src = product.image;
-        img.alt = product.name.replace(/\b\w/g, (char) => char.toUpperCase());
-        img.style.width = "150px";
-        img.style.height = "150px";
-        li.appendChild(img);
-
-        const storeLogo = document.createElement("img");
-        storeLogo.src =
-          product.store === "Carrefour"
-            ? "../static/carrefour_logo.png"
-            : product.store === "Día"
-            ? "../static/dia_logo.png"
-            : "../static/jumbo_logo.png";
-        storeLogo.alt = `${product.store} Logo`;
-        storeLogo.style.width = "20%";
-        storeLogo.style.height = "20%";
-        li.appendChild(storeLogo);
+        if (product.image) {
+          const img = document.createElement("img");
+          img.src = product.image;
+          img.alt = product.name.replace(/\b\w/g, (char) => char.toUpperCase());
+          img.style.width = "150px";
+          img.style.height = "150px";
+          li.appendChild(img);
+        }
 
         const a = document.createElement("a");
         a.href = product.url;
@@ -250,8 +210,6 @@
     };
   });
 </script>
-
-
 
 <div class="navbar">
   <a href="#">BairesCompare</a>
